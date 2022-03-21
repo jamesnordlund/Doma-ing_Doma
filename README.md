@@ -9,12 +9,12 @@
 Text information is compiled from:
 1. [Doma'a press releases](https://www.doma.com/press/press-releases/)
 2. [Doma's published resources for lenders](https://www.doma.com/resources-for-lenders/)
-3. [Doma's log posts](https://www.doma.com/category/writing-on-the-wall/)
+3. [Doma's blog posts](https://www.doma.com/category/writing-on-the-wall/)
 
 It never hurts to throw up a word cloud and verify that the corpus generates sensible output.
 ![word cloud](corpus_word_cloud.png)
 
-## Motivations
+## Motivation and Results
 
 Nice blog posts from Doma [like this one](https://www.doma.com/understanding-berts-semantic-interpretations/) show off how cool it can be to do a little visualization with models to learn more about them.
 
