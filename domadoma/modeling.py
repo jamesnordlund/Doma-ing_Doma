@@ -3,17 +3,19 @@ import json
 import matplotlib.pyplot as plt
 import os
 import pandas as pd
-from random import shuffle
+from random import shuffle, seed
 import spacy
 import string
 import torch
 from transformers import (AutoTokenizer, AutoModelForMaskedLM, BertTokenizer, BertForMaskedLM,
-                          DataCollatorForLanguageModeling, Trainer, TrainingArguments, set_seed)
+                          DataCollatorForLanguageModeling,
+                          RobertaTokenizer, RobertaForMaskedLM,
+                          Trainer, TrainingArguments, set_seed)
 from wordcloud import WordCloud
 
 
 def split_df(df,
-             test_size=.5):
+             test_size=.75):
     """Splits a dataset into train and test, with test_size proportion allocated to the latter"""
     rows = [i for i in range(df.shape[0])]
     shuffle(rows)
@@ -34,65 +36,64 @@ def refine_model(out_path):
             df['sent_id'].append(len(df['sent_id']))
             df['text'].append(sent.text)
     df = pd.DataFrame(df)
+    seed(0)
     df_train, df_test = split_df(df)
 
     model_ckpt = 'bert-base-uncased'
+    model_roberta = 'roberta-base'
 
     def tokenize(batch):
         return tokenizer(batch['text'], truncation=True, max_length=128, return_special_tokens_mask=True)
-    tokenizer = AutoTokenizer.from_pretrained(model_ckpt)
 
-    ds = DatasetDict({
-        'train': Dataset.from_pandas(df_train.reset_index(drop=True)),
-        'test': Dataset.from_pandas(df_test.reset_index(drop=True)),
-    })
-    ds = ds.map(tokenize, batched=True)
-    ds.set_format('torch')
+    for model in [model_roberta, model_ckpt]:
+        tokenizer = AutoTokenizer.from_pretrained(model)
 
-    set_seed(0)
-    data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm_probability=0.15)
-    data_collator.return_tensors = 'pt'
+        ds = DatasetDict({
+            'train': Dataset.from_pandas(df_train.reset_index(drop=True)),
+            'test': Dataset.from_pandas(df_test.reset_index(drop=True)),
+        })
+        ds = ds.map(tokenize, batched=True)
+        ds.set_format('torch')
 
-    training_args = TrainingArguments(
-        output_dir=f'{model_ckpt}-doma-128', per_device_train_batch_size=32,
-        logging_strategy='epoch', evaluation_strategy='epoch', save_strategy='epoch',
-        num_train_epochs=30, push_to_hub=False, log_level='error', report_to='none'
-    )
+        set_seed(0)
+        data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm_probability=0.15)
+        data_collator.return_tensors = 'pt'
 
-    trainer = Trainer(
-        model=AutoModelForMaskedLM.from_pretrained(model_ckpt), tokenizer=tokenizer, args=training_args,
-        data_collator=data_collator, train_dataset=ds['train'], eval_dataset=ds['test']
-    )
+        training_args = TrainingArguments(
+            output_dir=f'{model}-doma-128', per_device_train_batch_size=32,
+            logging_strategy='epoch', evaluation_strategy='epoch', save_strategy='epoch',
+            num_train_epochs=30, push_to_hub=False, log_level='error', report_to='none'
+        )
 
-    trainer.train()
+        trainer = Trainer(
+            model=AutoModelForMaskedLM.from_pretrained(model), tokenizer=tokenizer, args=training_args,
+            data_collator=data_collator, train_dataset=ds['train'], eval_dataset=ds['test']
+        )
 
-    trainer.save_model(f'{model_ckpt}-doma-128/over_fit')
+        trainer.train()
 
-    log = pd.DataFrame(trainer.state.log_history)
-    log.dropna(subset=["eval_loss"]).reset_index()["eval_loss"].plot(label="Validation")
-    log.dropna(subset=["loss"]).reset_index()["loss"].plot(label="Train")
+        trainer.save_model(f'{model}-doma-128/over_fit')
 
-    plt.xlabel("Epochs")
-    plt.ylabel("Loss")
-    plt.legend(loc="upper right")
+        log = pd.DataFrame(trainer.state.log_history)
+        log.dropna(subset=["eval_loss"]).reset_index()["eval_loss"].plot(label="Validation")
+        log.dropna(subset=["loss"]).reset_index()["loss"].plot(label="Train")
 
-    plt.savefig(f'{model_ckpt}-doma-128/training_curve.png')
-    plt.show()
-    plt.close()
+        plt.xlabel("Epochs")
+        plt.ylabel("Loss")
+        plt.legend(loc="upper right")
+
+        plt.savefig(f'{model}-doma-128/training_curve.png')
+        plt.show()
+        plt.close()
 
 
 def make_word_cloud(out_path):
     """Creates a word cloud based on the corpus.  The corpus dir is not published, so save to model dir."""
-    nlp = spacy.load('en_core_web_trf')
-
-    model_ckpt = 'bert-base-uncased'
 
     text = []
     for f_name in os.listdir(out_path + '/corpus/'):
         with open(out_path + '/corpus/' + f_name, 'r', encoding='utf8') as f:
-            doc = nlp(f.read())
-            for sent in doc.sents:
-                text.append(sent.text)
+            text.append(f.read())
     wordcloud = WordCloud(max_font_size=50, max_words=100).generate(' '.join(text))
     #plt.figure(figsize=(15, 15))
     plt.imshow(wordcloud, interpolation='bilinear')
@@ -132,37 +133,46 @@ def get_all_predictions(text_sentence,
                         top_clean=5):
     """Predict masked token in text_sentence, keeping top_clean best predictions."""
 
-    model_ckpt = 'bert-base-uncased'
-
     bert_tokenizer = BertTokenizer.from_pretrained('bert-base-uncased', do_lower_case=False)
-    bert_model = BertForMaskedLM.from_pretrained('bert-base-uncased', output_hidden_states=True, output_attentions=True)
+    bert_model = BertForMaskedLM.from_pretrained('bert-base-uncased',
+                                                 output_hidden_states=True, output_attentions=True)
 
-    doma_tokenizer = AutoTokenizer.from_pretrained(f'{model_ckpt}-doma-128/checkpoint-456', do_lower_case=False)
-    doma_model = AutoModelForMaskedLM.from_pretrained(f'{model_ckpt}-doma-128/checkpoint-456',
+    roberta_tokenizer = RobertaTokenizer.from_pretrained('roberta-base', do_lower_case=False)
+    roberta_model = RobertaForMaskedLM.from_pretrained('roberta-base',
+                                                       output_hidden_states=True, output_attentions=True)
+
+    doma_tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased-doma-128/over_fit', do_lower_case=False)
+    doma_model = AutoModelForMaskedLM.from_pretrained('bert-base-uncased-doma-128/over_fit',
                                                       output_hidden_states=True, output_attentions=True)
 
-    input_ids, mask_idx = encode(bert_tokenizer, text_sentence)
-    with torch.no_grad():
-        predict = bert_model(input_ids)[0]
-    bert = decode(bert_tokenizer, predict[0, mask_idx, :].topk(top_clean).indices.tolist(), top_clean)
+    rodoma_tokenizer = AutoTokenizer.from_pretrained('roberta-base-doma-128/over_fit', do_lower_case=False)
+    rodoma_model = AutoModelForMaskedLM.from_pretrained('roberta-base-doma-128/over_fit',
+                                                      output_hidden_states=True, output_attentions=True)
 
-    input_ids, mask_idx = encode(doma_tokenizer, text_sentence)
-    with torch.no_grad():
-        predict = doma_model(input_ids)[0]
-    doma = decode(doma_tokenizer, predict[0, mask_idx, :].topk(top_clean).indices.tolist(), top_clean)
+    lms = {'bert': [bert_tokenizer, bert_model],
+           'roberta': [roberta_tokenizer, roberta_model],
+           'doma': [doma_tokenizer, doma_model],
+           'rodoma': [rodoma_tokenizer, rodoma_model]}
+    output = {}
 
-    return {'bert': bert.split(), 'doma': doma.split()}
+    for mod, lm in lms.items():
+        input_ids, mask_idx = encode(lm[0], text_sentence)
+        with torch.no_grad():
+            predict = lm[1](input_ids)[0]
+        output.update({mod: decode(lm[0], predict[0, mask_idx, :].topk(top_clean).indices.tolist(), top_clean).split()})
+
+    return output
 
 
 def word_prediction():
     sentences = [
-        'The closing process should be <mask>',
-        'The traditional approach to titling is <mask>',
-        'We want home buying to be <mask>',
-        'With the aid of <mask>, we make closing faster'
+        'Doma wants the closing process to be <mask>.',
+        'The traditional mortgage process is too <mask>.',
+        'Our approach to titling is <mask> for home buyers.',
+        'With the aid of <mask>, we make closing faster.'
     ]
     results = {}
     for sent in sentences:
-        results.update({sent: get_all_predictions(text_sentence=sent, top_clean=5)})
+        results.update({sent: get_all_predictions(text_sentence=sent, top_clean=2)})
     with open('word_predictions.json', 'w') as f:
-        json.dump(results, f)
+        json.dump(results, f, indent=4, sort_keys=True)

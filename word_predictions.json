@@ -1,1 +1,74 @@
-{"The closing process should be <mask>": {"bert": ["stopped", "repeated", "completed", "complete", "done"], "doma": ["thorough", "straightforward", "streamlined", "easy", "transparent"]}, "The traditional approach to titling is <mask>": {"bert": ["abandoned", "discontinued", "adopted", "used", "gone"], "doma": ["straightforward", "simple", "outdated", "incorrect", "problematic"]}, "We want home buying to be <mask>": {"bert": ["easy", "fun", "good", "free", "done"], "doma": ["affordable", "easy", "simple", "inclusive", "easier"]}, "With the aid of <mask>, we make closing faster": {"bert": ["god", "light", "fire", "water", "love"], "doma": ["technology", "software", "data", "computers", "tech"]}}
+{
+    "Doma wants the closing process to be <mask>.": {
+        "bert": [
+            "complete",
+            "completed"
+        ],
+        "doma": [
+            "complete",
+            "streamlined"
+        ],
+        "roberta": [
+            "transparent",
+            "completed"
+        ],
+        "rodoma": [
+            "seamless",
+            "efficient"
+        ]
+    },
+    "Our approach to titling is <mask> for home buyers.": {
+        "bert": [
+            "recommended",
+            "suitable"
+        ],
+        "doma": [
+            "essential",
+            "revolutionary"
+        ],
+        "roberta": [
+            "ideal",
+            "good"
+        ],
+        "rodoma": [
+            "revolutionary",
+            "empowering"
+        ]
+    },
+    "The traditional mortgage process is too <mask>.": {
+        "bert": [
+            "complex",
+            "expensive"
+        ],
+        "doma": [
+            "complex",
+            "costly"
+        ],
+        "roberta": [
+            "complicated",
+            "complex"
+        ],
+        "rodoma": [
+            "complex",
+            "cumbersome"
+        ]
+    },
+    "With the aid of <mask>, we make closing faster.": {
+        "bert": [
+            "water",
+            "light"
+        ],
+        "doma": [
+            "technology",
+            "tech"
+        ],
+        "roberta": [
+            "gravity",
+            "levers"
+        ],
+        "rodoma": [
+            "technology",
+            "science"
+        ]
+    }
+}
